@@ -168,7 +168,7 @@ fn fetch_chapter_content(chapter: Chapter) -> Result<EpubContent<Cursor<String>>
 		}
 	}
 	if content.len() == 0 {
-		panic!("Discoverd no content for \"Chapter {} - {}\"", chapter.index, chapter.title);
+		panic!("Discovered no content for \"Chapter {} - {}\"", chapter.index, chapter.title);
 	}
 
 	let name = format!("chapter_{}.xhtml", chapter.index);
