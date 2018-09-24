@@ -1,0 +1,22 @@
+[package]
+name = "wuxia-dl"
+version = "0.1.0"
+authors = ["Jezza <jezzadabomb@gmail.com>"]
+edition = "2018"
+
+[profile.release]
+lto = true
+panic = 'abort'
+
+[dependencies]
+#hyper = "0.12.10"
+#html5ever = "0.22.3"
+#getopts = "0.2.18"
+epub-builder = "0.4.0"
+#hyper-native-tls = "0.3.0"
+reqwest = "0.9.0"
+#scraper = "0.7.0"
+select = "0.4.2"
+regex = "1.0.5"
+url = "1.2"
+error-chain = "0.12.0"
