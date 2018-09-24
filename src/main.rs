@@ -53,7 +53,8 @@ fn run(args: Vec<String>) -> Result<()> {
 				 .chain_err(|| format!("Unable to parse URL: \"{}\"", url))?;
 
 	println!("Downloading: {}", url);
-	let info = fetch_book_info(url);
+	let info = fetch_book_info(url)
+		.chain_err(|| "Unable to fetch book info")?;
 
 	let zip = ZipLibrary::new().unwrap();
 	let mut builder: EpubBuilder<ZipLibrary> = EpubBuilder::new(zip)
@@ -95,7 +96,7 @@ fn run(args: Vec<String>) -> Result<()> {
 	Ok(())
 }
 
-fn fetch_book_info(url: Url) -> BookInfo {
+fn fetch_book_info(url: Url) -> Result<BookInfo> {
 	let mut res = reqwest::get(url).unwrap();
 
 	let chapter_regex = Regex::new(r".+?(\d+)[- ]*(.*)").unwrap();
@@ -104,18 +105,26 @@ fn fetch_book_info(url: Url) -> BookInfo {
 
 	let url = res.url();
 
-	let book_title = doc.find(Class("p-15").descendant(Name("h4"))).next().unwrap().text();
+	let book_title = doc.find(Class("p-15").descendant(Name("h4"))).next()
+						.chain_err(|| "Failed to locate book title")?
+		.text();
 
 	let mut chapters = Vec::new();
 	for node in doc.find(Class("chapter-item").descendant(Name("a"))) {
 		let full_title = node.text().trim().to_owned();
 
-		let cap = chapter_regex.captures(&full_title).unwrap();
+		let cap = chapter_regex.captures(&full_title)
+							   .chain_err(|| format!("Failed to match regex against: {}", full_title))?;
 
-		let index = cap[1].parse::<u32>().unwrap();
+		let raw_index = &cap[1];
+		let index = raw_index.parse::<u32>()
+							 .chain_err(|| format!("Unable to parse index {}", raw_index))?;
 		let title = cap[2].to_owned();
 
-		let link = url.join(node.attr("href").unwrap()).unwrap();
+		let href = node.attr("href")
+					   .chain_err(|| "No href specified")?;
+		let link = url.join(href)
+					  .chain_err(|| format!("Unable to append href (\"{}\") to url (\"{}\").", href, url))?;
 
 		chapters.push(Chapter {
 			index,
@@ -131,7 +140,7 @@ fn fetch_book_info(url: Url) -> BookInfo {
 
 	println!("Found \"{}\" with {} chapters at \"{}\"", info.title, info.chapters.len(), url);
 
-	info
+	Ok(info)
 }
 
 fn fetch_chapter_content(chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
