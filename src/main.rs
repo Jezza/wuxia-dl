@@ -53,32 +53,32 @@ fn run(args: Vec<String>) -> Result<()> {
 				 .chain_err(|| format!("Unable to parse URL: \"{}\"", url))?;
 
 	println!("Downloading: {}", url);
-	let data = fetch_data(url);
+	let info = fetch_book_info(url);
 
 	let zip = ZipLibrary::new().unwrap();
 	let mut builder: EpubBuilder<ZipLibrary> = EpubBuilder::new(zip)
 		.chain_err(|| "Unable to construct EpubBuilder")?;
-	builder.metadata("title", data.title.clone())
+	builder.metadata("title", info.title.clone())
 		   .chain_err(|| "Unable to alter title.")?;
-	builder.metadata("toc_name", data.title.clone())
+	builder.metadata("toc_name", info.title.clone())
 		   .chain_err(|| "Unable to alter Table of Contents.")?;
 	builder.metadata("author", "WuxiaWorld")
 		   .chain_err(|| "Unable to set author metadata.")?;
 
-	let size = data.chapters.len();
+	let size = info.chapters.len();
 
-	for chapter in data.chapters {
+	for chapter in info.chapters {
 		let index = chapter.index;
 		println!("Fetching {}/{} :: \"{}\".", index, size, chapter.title);
 
-		let page = fetch_chapter_data(chapter)
+		let page = fetch_chapter_content(chapter)
 			.chain_err(|| "Unable to fetch chapter content")?;
 
 		builder.add_content(page)
 			   .chain_err(|| format!("Unable to add page: {}/{}", index, size))?;
 	}
 
-	let path = format!("{}.epub", data.title);
+	let path = format!("{}.epub", info.title);
 	let path = Path::new(&path);
 	if path.exists() {
 		println!("File (\"{}\") already exists. Deleting...", path.display());
@@ -90,12 +90,12 @@ fn run(args: Vec<String>) -> Result<()> {
 	builder.generate(file)
 		   .chain_err(|| "Unable to generate epub")?;
 
-	println!("Generated epub file @ \"{}\" for \"{}\"", path.display(), data.title);
+	println!("Generated epub file @ \"{}\" for \"{}\"", path.display(), info.title);
 
 	Ok(())
 }
 
-fn fetch_data(url: Url) -> BookData {
+fn fetch_book_info(url: Url) -> BookInfo {
 	let mut res = reqwest::get(url).unwrap();
 
 	let chapter_regex = Regex::new(r".+?(\d+)[- ]*(.*)").unwrap();
@@ -124,17 +124,17 @@ fn fetch_data(url: Url) -> BookData {
 		});
 	}
 
-	let data = BookData {
+	let info = BookInfo {
 		title: book_title,
 		chapters,
 	};
 
-	println!("Found \"{}\" with {} chapters at \"{}\"", data.title, data.chapters.len(), url);
+	println!("Found \"{}\" with {} chapters at \"{}\"", info.title, info.chapters.len(), url);
 
-	data
+	info
 }
 
-fn fetch_chapter_data(chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
+fn fetch_chapter_content(chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
 	let mut res = reqwest::get(chapter.link.clone())
 		.chain_err(|| "Unable to send get request.")?;
 //	let text = res.text()
@@ -173,7 +173,7 @@ fn fetch_chapter_data(chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
 }
 
 #[derive(Debug)]
-struct BookData {
+struct BookInfo {
 	title: String,
 	chapters: Vec<Chapter>,
 }
