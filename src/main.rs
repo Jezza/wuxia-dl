@@ -146,9 +146,6 @@ fn fetch_book_info(url: Url) -> Result<BookInfo> {
 fn fetch_chapter_content(chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
 	let mut res = reqwest::get(chapter.link.clone())
 		.chain_err(|| "Unable to send get request.")?;
-//	let text = res.text()
-//				  .chain_err(|| "Unable to read get request.")?;
-//	let mut cursor = Cursor::new(text.clone());
 
 	let doc = Document::from_read(&mut res)
 		.chain_err(|| "Invalid content from request")?;
@@ -156,15 +153,12 @@ fn fetch_chapter_content(chapter: Chapter) -> Result<EpubContent<Cursor<String>>
 	let mut content = String::new();
 	for node in doc.find(Class("fr-view").descendant(Name("span"))) {
 		content.push_str(&node.text());
-		content.push_str(&"<br><br>");
-		content.push(' ');
+		content.push_str(&"<br><br> ");
 	}
-	content.pop();
 	if content.len() == 0 {
 		for node in doc.find(Class("fr-view").child(Name("p"))) {
 			content.push_str(&node.text());
-			content.push_str(&"<br><br>");
-			content.push(' ');
+			content.push_str(&"<br><br> ");
 		}
 	}
 	if content.len() == 0 {
