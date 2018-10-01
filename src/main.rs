@@ -3,6 +3,7 @@
 extern crate epub_builder;
 #[macro_use]
 extern crate error_chain;
+extern crate rayon;
 extern crate regex;
 extern crate reqwest;
 extern crate select;
@@ -12,6 +13,7 @@ use epub_builder::EpubBuilder;
 use epub_builder::EpubContent;
 use epub_builder::ReferenceType;
 use epub_builder::ZipLibrary;
+use rayon::prelude::*;
 use regex::Regex;
 use reqwest::Client;
 use select::document::Document;
@@ -70,15 +72,20 @@ fn run(args: Vec<String>) -> Result<()> {
 
 	let size = info.chapters.len();
 
-	for chapter in info.chapters {
-		let index = chapter.index;
-		println!("Fetching {}/{} :: \"{}\".", index, size, chapter.title);
+	let pages: Vec<EpubContent<Cursor<String>>> = info.chapters
+				  .into_par_iter()
+				  .map(|chapter| {
+					  fetch_chapter_content(&client, chapter, size)
+						  .chain_err(|| "Unable to fetch chapter content")
+						  .unwrap()
+				  })
+				  .collect();
 
-		let page = fetch_chapter_content(&client, chapter)
-			.chain_err(|| "Unable to fetch chapter content")?;
-
+	let mut index = 0;
+	for page in pages {
 		builder.add_content(page)
 			   .chain_err(|| format!("Unable to add page: {}/{}", index, size))?;
+		index += 1;
 	}
 
 	let path = format!("{}.epub", info.title);
@@ -151,10 +158,13 @@ fn fetch_book_info(client: &Client, url: Url) -> Result<BookInfo> {
 	Ok(info)
 }
 
-fn fetch_chapter_content(client: &Client, chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
+fn fetch_chapter_content(client: &Client, chapter: Chapter, size: usize) -> Result<EpubContent<Cursor<String>>> {
 	let req = client.get(chapter.link)
 					.build()
 					.chain_err(|| "Unable to construct chapter request.")?;
+
+	println!("Fetching {}/{} :: \"{}\".", chapter.index, size, chapter.title);
+
 	let mut res = client.execute(req)
 						.chain_err(|| "Unable to send chapter request.")?;
 
