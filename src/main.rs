@@ -1,7 +1,5 @@
 #![recursion_limit = "1024"]
 
-#![feature(alloc_system)]
-extern crate alloc_system;
 extern crate epub_builder;
 #[macro_use]
 extern crate error_chain;
@@ -15,6 +13,7 @@ use epub_builder::EpubContent;
 use epub_builder::ReferenceType;
 use epub_builder::ZipLibrary;
 use regex::Regex;
+use reqwest::Client;
 use select::document::Document;
 use select::predicate::{Class, Name, Predicate};
 use self::errors::*;
@@ -52,11 +51,14 @@ fn run(args: Vec<String>) -> Result<()> {
 	let url = url.parse::<Url>()
 				 .chain_err(|| format!("Unable to parse URL: \"{}\"", url))?;
 
-	println!("Downloading: {}", url);
-	let info = fetch_book_info(url)
-		.chain_err(|| "Unable to fetch book info")?;
+	let client = Client::new();
 
-	let zip = ZipLibrary::new().unwrap();
+	println!("Inspecting \"{}\"...", url);
+	let info: BookInfo = fetch_book_info(&client, url)
+		.chain_err(|| format!("Unable to fetch book info."))?;
+
+	let zip = ZipLibrary::new()
+		.chain_err(|| "Unable to construct ZipLibrary.")?;
 	let mut builder: EpubBuilder<ZipLibrary> = EpubBuilder::new(zip)
 		.chain_err(|| "Unable to construct EpubBuilder")?;
 	builder.metadata("title", info.title.clone())
@@ -72,7 +74,7 @@ fn run(args: Vec<String>) -> Result<()> {
 		let index = chapter.index;
 		println!("Fetching {}/{} :: \"{}\".", index, size, chapter.title);
 
-		let page = fetch_chapter_content(chapter)
+		let page = fetch_chapter_content(&client, chapter)
 			.chain_err(|| "Unable to fetch chapter content")?;
 
 		builder.add_content(page)
@@ -96,12 +98,18 @@ fn run(args: Vec<String>) -> Result<()> {
 	Ok(())
 }
 
-fn fetch_book_info(url: Url) -> Result<BookInfo> {
-	let mut res = reqwest::get(url).unwrap();
+fn fetch_book_info(client: &Client, url: Url) -> Result<BookInfo> {
+	let req = client.get(url)
+					.build()
+					.chain_err(|| "Unable to construct book info request.")?;
+	let mut res = client.execute(req)
+						.chain_err(|| "Unable to execute book info request.")?;
 
-	let chapter_regex = Regex::new(r".+?(\d+)[- ]*(.*)").unwrap();
+	let chapter_regex = Regex::new(r".+?(\d+)[- ]*(.*)")
+		.chain_err(|| "Unable to construct regex.")?;
 
-	let doc = Document::from_read(&mut res).unwrap();
+	let doc = Document::from_read(&mut res)
+		.chain_err(|| "Unable to construct document from response.")?;
 
 	let url = res.url();
 
@@ -143,9 +151,12 @@ fn fetch_book_info(url: Url) -> Result<BookInfo> {
 	Ok(info)
 }
 
-fn fetch_chapter_content(chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
-	let mut res = reqwest::get(chapter.link.clone())
-		.chain_err(|| "Unable to send get request.")?;
+fn fetch_chapter_content(client: &Client, chapter: Chapter) -> Result<EpubContent<Cursor<String>>> {
+	let req = client.get(chapter.link)
+					.build()
+					.chain_err(|| "Unable to construct chapter request.")?;
+	let mut res = client.execute(req)
+						.chain_err(|| "Unable to send chapter request.")?;
 
 	let doc = Document::from_read(&mut res)
 		.chain_err(|| "Invalid content from request")?;
